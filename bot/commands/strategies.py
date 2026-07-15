@@ -49,11 +49,15 @@ class StrategiesCommand(BotCommand):
 
             config = get_config()
             sm = get_skill_manager(config)
-            from src.agent.factory import DEFAULT_AGENT_SKILLS
+            from src.agent.skills.defaults import DEFAULT_ACTIVE_SKILL_IDS as DEFAULT_AGENT_SKILLS
 
             # Derive activation status from config without mutating the skill
             # manager — this is a read-only listing command.
-            configured_active: set = set(config.agent_skills or DEFAULT_AGENT_SKILLS)
+            configured_raw = list(config.agent_skills or DEFAULT_AGENT_SKILLS)
+            if any(str(s).lower() == "all" for s in configured_raw):
+                configured_active: set = {s.name for s in sm.list_skills()}
+            else:
+                configured_active = set(configured_raw)
 
             all_skills = sm.list_skills()
             if not all_skills:
