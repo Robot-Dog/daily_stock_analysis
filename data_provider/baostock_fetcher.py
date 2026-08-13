@@ -16,6 +16,8 @@ BaostockFetcher - 备用数据源 2 (Priority 3)
 
 import logging
 import re
+import socket
+import threading
 from contextlib import contextmanager
 from datetime import datetime
 from typing import Optional, Generator
@@ -74,7 +76,13 @@ class BaostockFetcher(BaseFetcher):
     
     name = "BaostockFetcher"
     priority = int(os.getenv("BAOSTOCK_PRIORITY", "3"))
-    
+    # bs.login()/bs.logout()/query 的 socket 超时秒数。Baostock SDK 自身不设 socket
+    # timeout，网络/服务器异常（账号黑名单、服务器无响应）时 bs.login() 会无限 hang，
+    # 阻塞 worker 线程且无法被 task_queue 取消（线程卡在 C 扩展 socket 调用中）。
+    # 设此超时让 socket 自行超时返回，线程才能继续 fallback 并响应取消。
+    _SOCKET_TIMEOUT = float(os.getenv("BAOSTOCK_SOCKET_TIMEOUT", "30"))
+    _session_lock = threading.Lock()
+
     def __init__(self):
         """初始化 BaostockFetcher"""
         self._bs_module = None
@@ -99,35 +107,45 @@ class BaostockFetcher(BaseFetcher):
         1. 进入上下文时自动登录
         2. 退出上下文时自动登出
         3. 异常时也能正确登出
-        
+        4. 强制 socket 超时，防止 bs.login()/bs.logout() 无限 hang 阻塞 worker
+
         使用示例：
             with self._baostock_session():
                 # 在这里执行数据查询
         """
         bs = self._get_baostock()
         login_result = None
-        
-        try:
-            # 登录 Baostock
-            login_result = bs.login()
-            
-            if login_result.error_code != '0':
-                raise DataFetchError(f"Baostock 登录失败: {login_result.error_msg}")
-            
-            logger.debug("Baostock 登录成功")
-            
-            yield bs
-            
-        finally:
-            # 确保登出，防止连接泄露
+
+        # 串行化 Baostock 会话并强制 socket 超时。socket.setdefaulttimeout 是进程级
+        # 全局设置，用 _session_lock 串行化整个会话可避免多 worker 并发设置/恢复时的
+        # 全局竞态。其他数据源（requests/urllib3）显式设了自己的 timeout，不受影响。
+        with self._session_lock:
+            old_timeout = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(self._SOCKET_TIMEOUT)
             try:
-                logout_result = bs.logout()
-                if logout_result.error_code == '0':
-                    logger.debug("Baostock 登出成功")
-                else:
-                    logger.warning(f"Baostock 登出异常: {logout_result.error_msg}")
-            except Exception as e:
-                logger.warning(f"Baostock 登出时发生错误: {e}")
+                try:
+                    # 登录 Baostock
+                    login_result = bs.login()
+
+                    if login_result.error_code != '0':
+                        raise DataFetchError(f"Baostock 登录失败: {login_result.error_msg}")
+
+                    logger.debug("Baostock 登录成功")
+
+                    yield bs
+
+                finally:
+                    # 确保登出，防止连接泄露
+                    try:
+                        logout_result = bs.logout()
+                        if logout_result.error_code == '0':
+                            logger.debug("Baostock 登出成功")
+                        else:
+                            logger.warning(f"Baostock 登出异常: {logout_result.error_msg}")
+                    except Exception as e:
+                        logger.warning(f"Baostock 登出时发生错误: {e}")
+            finally:
+                socket.setdefaulttimeout(old_timeout)
     
     def _convert_stock_code(self, stock_code: str) -> str:
         """
