@@ -10,6 +10,8 @@ required_tools:
   - get_daily_history
   - analyze_trend
   - get_realtime_quote
+  - get_chip_distribution
+  - search_stock_news
 aliases: [缩量回踩, 回踩]
 default_router: true
 default_priority: 40
@@ -36,7 +38,7 @@ instructions: |
 
   4. **确认条件**（关联理念5：风险排查）：
      - `search_stock_news` 无利空消息。
-     - 筹码分布健康（获利比例 50-80%）。
+     - 使用 `get_chip_distribution` 验证筹码分布（如有数据）：`profit_ratio` 在 50-80% 区间。
 
   评分调整：
   - 缩量回踩 MA5：sentiment_score +10
