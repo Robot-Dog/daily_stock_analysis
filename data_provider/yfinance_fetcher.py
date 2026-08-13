@@ -324,13 +324,28 @@ class YfinanceFetcher(BaseFetcher):
         if hist.empty:
             return None
         today_row = hist.iloc[-1]
-        prev_row = hist.iloc[-2] if len(hist) > 1 else today_row
         price = float(today_row['Close'])
-        prev_close = float(prev_row['Close'])
-        change = price - prev_close
-        change_pct = (change / prev_close) * 100 if prev_close else 0
         high = float(today_row['High'])
         low = float(today_row['Low'])
+
+        # 昨收优先取 fast_info.previous_close：yfinance 对部分代码（如 HSTECH.HK）的
+        # history(period='2d') 只返回当日一行，iloc[-2] 取不到真正昨收，旧逻辑把今收当
+        # 昨收导致涨跌幅恒为 0（点数对、涨幅错）。fast_info.previous_close 对这些代码仍
+        # 能正常返回。其次回退到 history 前一行；两者都无时退回今收以保持 change_pct
+        # 为 float（渲染层 _get_index_change_arrow 要求 float）。
+        prev_close = None
+        try:
+            prev_close = getattr(ticker.fast_info, "previous_close", None)
+        except Exception:
+            prev_close = None
+        if prev_close is None and len(hist) > 1:
+            prev_close = float(hist.iloc[-2]['Close'])
+        if prev_close is None:
+            prev_close = price
+        prev_close = float(prev_close)
+
+        change = price - prev_close
+        change_pct = (change / prev_close) * 100 if prev_close else 0
         # 振幅 = (最高 - 最低) / 昨收 * 100
         amplitude = ((high - low) / prev_close * 100) if prev_close else 0
         return {
