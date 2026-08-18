@@ -27,8 +27,8 @@ instructions: |
      - `analyze_trend` → trend_status 应为 BEAR 或 STRONG_BEAR。
 
   2. **量能异动**：
-     - 当日成交量 > 5 日均量的 3 倍。
-     - 使用 `get_realtime_quote` → volume_ratio > 3.0。
+     - 当日成交量 > 5 日均量的 2 倍。
+     - 使用 `get_realtime_quote` → volume_ratio > 2.0。
      - 该异动应出现在前期极度缩量之后。
 
   3. **价格企稳**：
@@ -46,7 +46,7 @@ instructions: |
      - 止损必须严格（设在近期低点下方）。
 
   评分调整：
-  - 底部放量确认：sentiment_score +8
+  - 底部放量确认：sentiment_score +12
   - 配合阳线 + 新闻催化：额外 +5
   - 在 `buy_reason` 和 `pattern_analysis` 中注明"底部放量"。
   - 止损设在近期低点。

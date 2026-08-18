@@ -11,7 +11,7 @@ required_tools:
   - analyze_trend
 aliases: [均线金叉, 金叉]
 default_priority: 20
-market_regimes: [trending_up]
+market_regimes: [trending_up, sideways]
 
 instructions: |
   **均线金叉（MA Golden Cross Strategy）**
